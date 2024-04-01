@@ -148,7 +148,7 @@ impl XMInfo {
         }
     }
 
-    pub fn file_name(&self, header: &[u8]) -> String {
+    pub fn file_name(&self, header: &[u8], stem: &str) -> String {
         let header_chars: Vec<u8> = header
             .iter()
             .filter(|b| (&&0x20u8..=&&0x7Eu8).contains(&b))
@@ -169,14 +169,7 @@ impl XMInfo {
             "m4a"
         };
 
-        format!(
-            "{} - {} - {}.{}",
-            self.artist.clone().unwrap_or_default(),
-            self.album.clone().unwrap_or_default(),
-            self.title.clone().unwrap_or_default(),
-            ext_name
-        )
-        .replace(['\\', ':', '/', '*', '?', '\"', '<', '>', '|'], "")
+        format!("{}.{}", stem, ext_name)
     }
 }
 

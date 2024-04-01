@@ -35,7 +35,7 @@ fn decrypt_file(file: &PathBuf) -> Result<()> {
     println!("xm_info: {:?}", xm_info);
 
     let audio = xm::decrypt(&xm_info, &content[..])?;
-    let file_name = xm_info.file_name(&audio[..0xFF]);
+    let file_name = xm_info.file_name(&audio[..0xFF], file.file_stem().unwrap().to_str().unwrap());
 
     let target_path = file.parent().expect("no parent dir").join(file_name);
     println!("target_path: {:?}", target_path);
