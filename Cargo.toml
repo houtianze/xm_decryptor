@@ -1,6 +1,6 @@
 [package]
 name = "xm_decryptor"
-version = "0.1.0"
+version = "0.1.1-tz"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -15,6 +15,7 @@ wasmer-compiler-cranelift = "4.2.3"
 bitflags = "2.0"
 byteorder = "1.4"
 flate2 = "1"
+clap = { version = "4.5.4", features = ["derive"] }
 
 [profile.release]
 lto = true

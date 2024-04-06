@@ -90,6 +90,7 @@ pub fn decrypt(xm_info: &XMInfo, content: &[u8]) -> Result<Vec<u8>> {
     Ok(decoded_data)
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
 pub struct XMInfo {
     title: Option<String>,
