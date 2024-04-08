@@ -17,7 +17,8 @@ pub fn decrypt(xm_info: &XMInfo, content: &[u8]) -> Result<Vec<u8>> {
     let encrypted_data = &content[xm_info.header_size..xm_info.header_size + xm_info.size];
     let iv = xm_info.iv()?;
     let decrypted_data = aes_util::decrypt(encrypted_data, XM_KEY, &iv)?;
-    let decrypted_str = String::from_utf8(decrypted_data)?;
+    eprintln!("{}", "Stage 1 (AES) done.");
+    let decrypted_data = get_printable_bytes(&decrypted_data);
 
     let track_id = format!("{}", xm_info.tracknumber);
 
@@ -31,19 +32,26 @@ pub fn decrypt(xm_info: &XMInfo, content: &[u8]) -> Result<Vec<u8>> {
     let stack_pointer = func_a.call(&mut store, &[Value::I32(-16)])?[0].clone();
 
     let func_c = instance.exports.get_function("c")?;
-    let de_data_offset = func_c.call(&mut store, &[Value::I32(decrypted_str.len() as i32)])?[0]
+    let de_data_offset = func_c.call(&mut store, &[Value::I32(decrypted_data.len() as i32)])?[0]
         .i32()
         .expect("de_data_offset none");
 
     let track_id_offset = func_c.call(&mut store, &[Value::I32(track_id.len() as i32)])?[0]
         .i32()
         .expect("track_id_offset none");
+    eprintln!(
+        "stack_pointer: {:?}, de_data_offset: {}, track_id_offset: {}, track_id_len: {}",
+        stack_pointer,
+        de_data_offset,
+        track_id_offset,
+        track_id.len()
+    );
 
     let memory_i = instance.exports.get_memory("i")?;
     {
         let view = memory_i.view(&store);
-        for (i, b) in decrypted_str.bytes().enumerate() {
-            view.write_u8(de_data_offset as u64 + i as u64, b)?;
+        for (i, b) in decrypted_data.iter().enumerate() {
+            view.write_u8(de_data_offset as u64 + i as u64, *b)?;
         }
         for (i, b) in track_id.bytes().enumerate() {
             view.write_u8(track_id_offset as u64 + i as u64, b)?;
@@ -56,7 +64,7 @@ pub fn decrypt(xm_info: &XMInfo, content: &[u8]) -> Result<Vec<u8>> {
         &[
             stack_pointer.clone(),
             Value::I32(de_data_offset),
-            Value::I32(decrypted_str.len() as i32),
+            Value::I32(decrypted_data.len() as i32),
             Value::I32(track_id_offset),
             Value::I32(track_id.len() as i32),
         ],
@@ -85,9 +93,23 @@ pub fn decrypt(xm_info: &XMInfo, content: &[u8]) -> Result<Vec<u8>> {
         result_data
     );
 
+    eprintln!("{}", "Stage 2 (WASM) done");
     let mut decoded_data = base64_util::decode(full_base64)?;
     decoded_data.extend_from_slice(&content[xm_info.header_size + xm_info.size..]);
     Ok(decoded_data)
+}
+
+fn get_printable_bytes(bytes: &Vec<u8>) -> Vec<u8> {
+    bytes[0..get_printable_count(bytes)].to_vec()
+}
+
+fn get_printable_count(bytes: &Vec<u8>) -> usize {
+    for (i, b) in bytes.iter().enumerate() {
+        if *b < 0x20 || *b > 0x7e {
+            return i;
+        }
+    }
+    bytes.len()
 }
 
 #[allow(dead_code)]
@@ -133,7 +155,16 @@ impl From<Tag> for XMInfo {
                 .map(|f| f.content().text().unwrap_or_default().to_string()),
             encoding_technology: value
                 .get("TSSE")
-                .map(|f| f.content().text().unwrap_or_default().to_string().replace('\0', '/')),
+                // For mp3 files, this value can be something like "\0\0qTwMiLAAAJ3L79",
+                // which we need to change to "//qTwMiLAAAJ3L79" for it to be base64 decodable.
+                // This seems to be a bug in the ID3 library
+                .map(|f| {
+                    f.content()
+                        .text()
+                        .unwrap_or_default()
+                        .to_string()
+                        .replace("\0", "/")
+                }),
         }
     }
 }
@@ -155,9 +186,11 @@ impl XMInfo {
             .filter(|b| (&&0x20u8..=&&0x7Eu8).contains(&b))
             .copied()
             .collect();
+        eprintln!("header_chars: {:?}", header_chars);
         let header_str = String::from_utf8(header_chars)
             .unwrap_or_default()
             .to_ascii_lowercase();
+        eprintln!("header_str: {}", header_str);
         let ext_name = if header_str.contains("m4a") {
             "m4a"
         } else if header_str.contains("mp3") {
@@ -167,8 +200,9 @@ impl XMInfo {
         } else if header_str.contains("wav") {
             "wav"
         } else {
-            // this likely an mp3 file that has no dedicated magic string
-            // e.g. header_str: h"dy$bit@slb1n>^&pa`im#hlzw?
+            // header_str: h"dy$bit@slb1n>^&pa`im#hlzw?
+            // in this case, it's likely an mp3 file that has no dedicated magic string
+            eprintln!("{}", "can't detect file extension, assuming it's mp3");
             "mp3"
         };
 
