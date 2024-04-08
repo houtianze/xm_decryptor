@@ -133,7 +133,7 @@ impl From<Tag> for XMInfo {
                 .map(|f| f.content().text().unwrap_or_default().to_string()),
             encoding_technology: value
                 .get("TSSE")
-                .map(|f| f.content().text().unwrap_or_default().to_string()),
+                .map(|f| f.content().text().unwrap_or_default().to_string().replace('\0', '/')),
         }
     }
 }
@@ -167,7 +167,9 @@ impl XMInfo {
         } else if header_str.contains("wav") {
             "wav"
         } else {
-            "m4a"
+            // this likely an mp3 file that has no dedicated magic string
+            // e.g. header_str: h"dy$bit@slb1n>^&pa`im#hlzw?
+            "mp3"
         };
 
         format!("{}.{}", stem, ext_name)
